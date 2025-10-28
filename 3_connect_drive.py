@@ -190,6 +190,7 @@ def sync_deletions_from_gcs(bucket, sync_state, current_drive_file_ids):
     deleted_file_ids = synced_file_ids - current_drive_file_ids
     
     deleted_count = 0
+    cleaned_count = 0  # Files removed from sync state but already deleted from GCS
     
     if deleted_file_ids:
         print_status(f"Found {len(deleted_file_ids)} files to delete from GCS")
@@ -210,8 +211,12 @@ def sync_deletions_from_gcs(bucket, sync_state, current_drive_file_ids):
                     blob.delete()
                     print_status(f"Deleted from GCS: {file_name}")
                     deleted_count += 1
+                else:
+                    # File already deleted from GCS, just clean up sync state
+                    print_status(f"Cleaning sync state for already-deleted file: {file_name}")
+                    cleaned_count += 1
                 
-                # Remove from sync state
+                # Remove from sync state regardless
                 del sync_state['files'][file_id]
                 
             except Exception as e:
@@ -219,10 +224,12 @@ def sync_deletions_from_gcs(bucket, sync_state, current_drive_file_ids):
         
         if deleted_count > 0:
             print_success(f"Deleted {deleted_count} files from GCS")
+        if cleaned_count > 0:
+            print_success(f"Cleaned {cleaned_count} orphaned entries from sync state")
     else:
         print_status("No deleted files found")
     
-    return deleted_count
+    return deleted_count + cleaned_count  # Return total changes made
 
 def sync_files_to_gcs(drive_service, bucket, folder_id, sync_state, full_sync=False):
     """Sync files from Drive to GCS (incremental or full)."""
@@ -386,19 +393,21 @@ def main():
         )
         
         if synced_count > 0 or deleted_count > 0:
+            # Update and save sync state after successful GCS operations
+            sync_state['last_sync'] = datetime.now(timezone.utc).isoformat()
+            save_sync_state(sync_state)
+            print_status("Sync state saved")
+            
             # Import from GCS to Vertex AI Search
             import_success = import_from_gcs_to_vertex_ai(bucket)
             
             if import_success:
-                # Update sync state
-                sync_state['last_sync'] = datetime.now(timezone.utc).isoformat()
-                save_sync_state(sync_state)
-                
                 print_success("Drive sync completed successfully!")
                 print_status("Documents are now being indexed in Vertex AI Search")
                 print_status("Check the console for indexing progress")
             else:
                 print_error("Import to Vertex AI Search failed")
+                print_error("Note: GCS sync was successful and state was saved")
                 sys.exit(1)
         else:
             print_status("No new files to sync and no deletions detected")
