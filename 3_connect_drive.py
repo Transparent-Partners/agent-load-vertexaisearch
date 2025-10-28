@@ -181,12 +181,61 @@ def upload_to_gcs(bucket, file_buffer, gcs_path, mime_type):
         print_error(f"Error uploading to GCS: {e}")
         return None
 
+def sync_deletions_from_gcs(bucket, sync_state, current_drive_file_ids):
+    """Remove files from GCS that no longer exist in Google Drive."""
+    print_status("Checking for deleted files...")
+    
+    # Get files that are in sync state but not in current Drive listing
+    synced_file_ids = set(sync_state['files'].keys())
+    deleted_file_ids = synced_file_ids - current_drive_file_ids
+    
+    deleted_count = 0
+    
+    if deleted_file_ids:
+        print_status(f"Found {len(deleted_file_ids)} files to delete from GCS")
+        
+        for file_id in deleted_file_ids:
+            file_info = sync_state['files'][file_id]
+            file_name = file_info['name']
+            gcs_path = file_info['gcs_path']
+            
+            try:
+                # Extract blob name from GCS URI
+                # Format: gs://bucket-name/blob-name
+                blob_name = gcs_path.split(f"gs://{bucket.name}/")[1]
+                
+                # Delete from GCS
+                blob = bucket.blob(blob_name)
+                if blob.exists():
+                    blob.delete()
+                    print_status(f"Deleted from GCS: {file_name}")
+                    deleted_count += 1
+                
+                # Remove from sync state
+                del sync_state['files'][file_id]
+                
+            except Exception as e:
+                print_error(f"Error deleting {file_name} from GCS: {e}")
+        
+        if deleted_count > 0:
+            print_success(f"Deleted {deleted_count} files from GCS")
+    else:
+        print_status("No deleted files found")
+    
+    return deleted_count
+
 def sync_files_to_gcs(drive_service, bucket, folder_id, sync_state, full_sync=False):
     """Sync files from Drive to GCS (incremental or full)."""
     print_status("Starting file sync from Drive to GCS...")
     
     # List all files in Drive
     drive_files = list_drive_files(drive_service, folder_id)
+    
+    # Track current Drive file IDs for deletion detection
+    current_drive_file_ids = {f['id'] for f in drive_files if f['mimeType'] != 'application/vnd.google-apps.folder'}
+    
+    # Handle deletions first
+    deleted_count = sync_deletions_from_gcs(bucket, sync_state, current_drive_file_ids)
     
     synced_count = 0
     skipped_count = 0
@@ -239,8 +288,8 @@ def sync_files_to_gcs(drive_service, bucket, folder_id, sync_state, full_sync=Fa
         else:
             error_count += 1
     
-    print_success(f"Sync complete: {synced_count} synced, {skipped_count} skipped, {error_count} errors")
-    return synced_count
+    print_success(f"Sync complete: {synced_count} synced, {skipped_count} skipped, {deleted_count} deleted, {error_count} errors")
+    return synced_count, deleted_count
 
 def import_from_gcs_to_vertex_ai(bucket):
     """Import documents from GCS to Vertex AI Search."""
@@ -328,7 +377,7 @@ def main():
         drive_service = initialize_drive_service()
         
         # Sync files from Drive to GCS
-        synced_count = sync_files_to_gcs(
+        synced_count, deleted_count = sync_files_to_gcs(
             drive_service,
             bucket,
             FOLDER_ID,
@@ -336,7 +385,7 @@ def main():
             full_sync=args.full_sync
         )
         
-        if synced_count > 0:
+        if synced_count > 0 or deleted_count > 0:
             # Import from GCS to Vertex AI Search
             import_success = import_from_gcs_to_vertex_ai(bucket)
             
@@ -352,7 +401,7 @@ def main():
                 print_error("Import to Vertex AI Search failed")
                 sys.exit(1)
         else:
-            print_status("No new files to sync")
+            print_status("No new files to sync and no deletions detected")
             print_success("Drive sync completed - all files are up to date")
         
     except KeyboardInterrupt:

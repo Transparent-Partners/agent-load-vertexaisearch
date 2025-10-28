@@ -111,9 +111,10 @@ python 3_connect_drive.py
 ```
 Syncs files from your Google Drive folder to GCS, then imports them into Vertex AI Search.
 
-**Options:**
-- Default: Incremental sync (only new/modified files)
-- `--full-sync`: Re-sync all files regardless of sync state
+**Features:**
+- **Incremental sync**: Only processes new/modified files (default)
+- **Deletion handling**: Automatically removes files from GCS/Vertex AI when deleted from Drive
+- **Full sync option**: Re-process all files with `--full-sync`
 
 ```bash
 # Incremental sync (recommended)
@@ -122,6 +123,11 @@ python 3_connect_drive.py
 # Full sync (re-process everything)
 python 3_connect_drive.py --full-sync
 ```
+
+**How Deletion Works:**
+- Script compares current Drive files with sync state
+- Files removed from Drive are detected and deleted from GCS
+- Vertex AI Search automatically updates its index on next import
 
 ### 4. Test Search
 ```bash
@@ -162,14 +168,17 @@ Ensure you have:
 Instead of using the undocumented `setUpDataConnector` API, we use a reliable GCS-based approach:
 
 1. **Drive API**: List and download files from your Google Drive folder
-2. **GCS Storage**: Upload files to a Google Cloud Storage bucket
-3. **Import API**: Use the proven ImportDocuments API to import from GCS
-4. **Incremental Sync**: Track file modifications to only sync changed files
+2. **Deletion Detection**: Compare current Drive files with sync state to find deleted files
+3. **GCS Cleanup**: Remove deleted files from GCS bucket
+4. **GCS Upload**: Upload new/modified files to Google Cloud Storage bucket
+5. **Import API**: Use the proven ImportDocuments API to import from GCS
+6. **Incremental Sync**: Track file modifications to only sync changed files
 
 ### Benefits
 - ✅ Uses stable, documented APIs
 - ✅ Full programmatic control
 - ✅ Efficient incremental updates
+- ✅ **Automatic deletion handling**
 - ✅ Production-ready and scalable
 - ✅ Works with all supported file types
 
@@ -179,7 +188,7 @@ The script maintains a `drive_sync_state.json` file that tracks:
 - File IDs and modification times
 - GCS paths for each synced file
 
-This enables efficient incremental syncs where only new or modified files are processed.
+This enables efficient incremental syncs and deletion detection where only new, modified, or removed files are processed.
 
 ## Supported File Types
 
