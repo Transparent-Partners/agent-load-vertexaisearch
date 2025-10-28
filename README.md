@@ -449,7 +449,7 @@ agent-load-vertexaisearch/
 ├── config.py                    # Configuration with env var support
 ├── 1_create_data_store.py      # Data store creation
 ├── 2_create_engine.py          # Search engine creation
-├── 3_connect_drive.py          # Drive → GCS → Vertex AI sync
+├── 3_connect_drive.py          # Drive → GCS → Vertex AI sync (with deletion handling)
 ├── 4_test_search.py            # Search testing tool
 ├── diagnose_drive_access.py    # Diagnostic tool
 ├── requirements.txt            # Python dependencies
@@ -457,7 +457,9 @@ agent-load-vertexaisearch/
 ├── .gitignore                  # Git ignore rules
 ├── README.md                   # This file
 ├── INTEGRATION_GUIDE.md        # External integration documentation
-└── FINAL_SUMMARY.md           # Complete project summary
+├── DELETION_FEATURE.md         # Deletion handling documentation
+├── FINAL_SUMMARY.md            # Complete project summary
+└── CLEANUP_SUMMARY.md          # Maintainability improvements summary
 ```
 
 ## API Integration
