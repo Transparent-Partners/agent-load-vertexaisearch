@@ -112,8 +112,9 @@ python 3_connect_drive.py
 Syncs files from your Google Drive folder to GCS, then imports them into Vertex AI Search.
 
 **Features:**
+- **Automatic additions**: New files added to Drive are automatically synced and indexed
+- **Automatic deletions**: Files removed from Drive are automatically deleted from GCS/Vertex AI
 - **Incremental sync**: Only processes new/modified files (default)
-- **Deletion handling**: Automatically removes files from GCS/Vertex AI when deleted from Drive
 - **Full sync option**: Re-process all files with `--full-sync`
 
 ```bash
@@ -124,10 +125,16 @@ python 3_connect_drive.py
 python 3_connect_drive.py --full-sync
 ```
 
-**How Deletion Works:**
-- Script compares current Drive files with sync state
-- Files removed from Drive are detected and deleted from GCS
-- Vertex AI Search automatically updates its index on next import
+**How It Works:**
+- **Additions**: Script detects new files in Drive, uploads to GCS, and triggers Vertex AI import
+- **Deletions**: Script compares current Drive files with sync state, removes deleted files from GCS
+- **Modifications**: Script detects file changes by comparing timestamps and re-syncs updated files
+- Vertex AI Search automatically updates its index on each import
+
+**Important Limitations:**
+- ⚠️ **Only scans root folder**: Subdirectories are NOT recursively scanned
+- Files moved into subdirectories will be treated as deletions
+- Files moved out of subdirectories to root will be treated as new additions
 
 ### 4. Test Search
 ```bash
@@ -167,7 +174,7 @@ Ensure you have:
 
 Instead of using the undocumented `setUpDataConnector` API, we use a reliable GCS-based approach:
 
-1. **Drive API**: List and download files from your Google Drive folder
+1. **Drive API**: List and download files from your Google Drive folder (root level only)
 2. **Deletion Detection**: Compare current Drive files with sync state to find deleted files
 3. **GCS Cleanup**: Remove deleted files from GCS bucket
 4. **GCS Upload**: Upload new/modified files to Google Cloud Storage bucket
@@ -177,10 +184,17 @@ Instead of using the undocumented `setUpDataConnector` API, we use a reliable GC
 ### Benefits
 - ✅ Uses stable, documented APIs
 - ✅ Full programmatic control
+- ✅ **Automatic addition and deletion handling**
 - ✅ Efficient incremental updates
-- ✅ **Automatic deletion handling**
 - ✅ Production-ready and scalable
 - ✅ Works with all supported file types
+
+### Directory Scanning Behavior
+- **Root folder only**: The script scans files in the specified Google Drive folder's root level
+- **No recursion**: Subdirectories are NOT recursively scanned
+- **Folder movements**: Moving files into/out of subdirectories triggers deletion/addition events
+
+If you need subdirectory support, the script can be modified to implement recursive directory traversal.
 
 ### Sync State
 The script maintains a `drive_sync_state.json` file that tracks:
